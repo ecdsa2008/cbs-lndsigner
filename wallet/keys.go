@@ -3,7 +3,7 @@
 // Copyright (C) 2015-2022 Lightning Labs and The Lightning Network Developers
 // Copyright (C) 2022 Bottlepay and The Lightning Network Developers
 
-package vault
+package wallet
 
 import (
 	"bytes"

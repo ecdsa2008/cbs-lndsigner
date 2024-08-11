@@ -1,4 +1,4 @@
-package vault
+package wallet
 
 import (
 	"errors"

@@ -5,8 +5,8 @@ package keyring
 import "errors"
 
 var (
-	ErrNoSharedKeyReturned = errors.New("vault returned no shared key")
-	ErrBadSharedKey        = errors.New("vault returned bad shared key")
-	ErrNoSignatureReturned = errors.New("vault returned no signature")
-	ErrNoPubkeyReturned    = errors.New("vault returned no pubkey")
+	ErrNoSharedKeyReturned = errors.New("wallet returned no shared key")
+	ErrBadSharedKey        = errors.New("wallet returned bad shared key")
+	ErrNoSignatureReturned = errors.New("wallet returned no signature")
+	ErrNoPubkeyReturned    = errors.New("wallet returned no pubkey")
 )

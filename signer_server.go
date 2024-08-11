@@ -8,12 +8,12 @@ package lndsigner
 import (
 	"context"
 	"fmt"
+	"github.com/Safulet/cbs-lndsigner/wallet"
 
+	"github.com/Safulet/cbs-lndsigner/keyring"
+	"github.com/Safulet/cbs-lndsigner/proto"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
-	"github.com/nydig/lndsigner/keyring"
-	"github.com/nydig/lndsigner/proto"
-	"github.com/nydig/lndsigner/vault"
 )
 
 // Server is a sub-server of the main RPC server: the signer RPC. This sub RPC
@@ -123,7 +123,7 @@ func (s *signerServer) DeriveSharedKey(ctx context.Context,
 	// key.
 	if keyLoc == nil {
 		keyLoc = &proto.KeyLocator{
-			KeyFamily: int32(vault.NodeKeyAcct),
+			KeyFamily: int32(wallet.NodeKeyAcct),
 			KeyIndex:  0,
 		}
 	}

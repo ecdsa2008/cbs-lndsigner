@@ -8,10 +8,10 @@ package lndsigner
 import (
 	"context"
 	"fmt"
+	"github.com/Safulet/cbs-lndsigner/wallet"
 
-	"github.com/hashicorp/vault/api"
-	"github.com/nydig/lndsigner/keyring"
-	"github.com/nydig/lndsigner/proto"
+	"github.com/Safulet/cbs-lndsigner/keyring"
+	"github.com/Safulet/cbs-lndsigner/proto"
 	"github.com/tv42/zbase32"
 	"google.golang.org/grpc"
 )
@@ -30,8 +30,6 @@ type rpcServer struct {
 	// alignment.
 	proto.UnimplementedLightningServer
 
-	client *api.Logical
-
 	cfg *Config
 
 	keyRing *keyring.KeyRing
@@ -44,16 +42,18 @@ var _ proto.LightningServer = (*rpcServer)(nil)
 // newRPCServer creates and returns a new instance of the rpcServer. Before
 // dependencies are added, this will be an non-functioning RPC server only to
 // be used to register the LightningService with the gRPC server.
-func newRPCServer(cfg *Config, c *api.Logical) *rpcServer {
-	return &rpcServer{
-		cfg:    cfg,
-		client: c,
-		keyRing: keyring.NewKeyRing(
-			c,
-			cfg.NodePubKey,
-			cfg.ActiveNetParams.HDCoinType,
-		),
+func newRPCServer(cfg *Config) (*rpcServer, error) {
+	seed, err := wallet.SeedFromSeedAndPassPhrases(cfg.SeedPhrase, cfg.PassPhrase)
+	if err != nil {
+		return nil, err
 	}
+	return &rpcServer{
+		cfg: cfg,
+		keyRing: keyring.NewKeyRing(
+			cfg.ActiveNetParams.HDCoinType,
+			wallet.NewWallet(seed, &cfg.ActiveNetParams),
+		),
+	}, nil
 }
 
 // intercept allows the RPC server to intercept requests to ensure that they're
@@ -71,19 +71,19 @@ func (r *rpcServer) intercept(ctx context.Context, req interface{},
 // RegisterWithGrpcServer registers the rpcServer and any subservers with the
 // root gRPC server.
 func (r *rpcServer) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
-	// Register the main RPC server.
+	// Register the main RPC server. for SignMessage method that signs a message with this node's private key
 	lnDesc := proto.Lightning_ServiceDesc
 	lnDesc.ServiceName = "lnrpc.Lightning"
 	grpcServer.RegisterService(&lnDesc, r)
 
-	// Register the wallet subserver.
+	// Register the wallet subserver. for SignPsbt method.
 	walletDesc := proto.WalletKit_ServiceDesc
 	walletDesc.ServiceName = "walletrpc.WalletKit"
 	grpcServer.RegisterService(&walletDesc, &walletKit{
 		server: r,
 	})
 
-	// Register the signer subserver.
+	// Register the signer subserver. for DeriveSharedKey and SignMessage methods.
 	signerDesc := proto.Signer_ServiceDesc
 	signerDesc.ServiceName = "signrpc.Signer"
 	grpcServer.RegisterService(&signerDesc, &signerServer{

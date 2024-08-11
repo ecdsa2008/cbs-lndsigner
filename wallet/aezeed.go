@@ -1,7 +1,7 @@
 // Copyright (C) 2015-2022 Lightning Labs and The Lightning Network Developers
 // Copyright (C) 2022 Bottlepay and The Lightning Network Developers
 
-package vault
+package wallet
 
 import (
 	"encoding/binary"
@@ -18,7 +18,7 @@ var (
 	reverseWordMap map[string]int
 )
 
-func seedFromSeedAndPassPhrases(seedPhrase, passPhrase string) ([]byte, error) {
+func SeedFromSeedAndPassPhrases(seedPhrase, passPhrase string) ([]byte, error) {
 	if passPhrase == "" {
 		passPhrase = "aezeed"
 	}
@@ -2038,7 +2038,7 @@ vanish
 vapor
 various
 vast
-vault
+Wallet
 vehicle
 velvet
 vendor

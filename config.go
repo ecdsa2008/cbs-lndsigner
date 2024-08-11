@@ -6,6 +6,7 @@
 package lndsigner
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/nydig/lndsigner/vault"
 )
 
 const (
@@ -35,12 +35,11 @@ var (
 	//   C:\Users\<username>\AppData\Local\Lndsigner on Windows
 	//   ~/.lndsigner on Linux
 	//   ~/Library/Application Support/Lndsigner on MacOS
-	DefaultSignerDir = btcutil.AppDataDir("lndsigner", false)
+	DefaultSignerDir = btcutil.AppDataDir("cbs_lndsigner", false)
 
 	// DefaultConfigFile is the default full path of lndsignerd's
 	// configuration file.
-	DefaultConfigFile = filepath.Join(DefaultSignerDir, defaultConfigFilename)
-
+	DefaultConfigFile  = filepath.Join(DefaultSignerDir, defaultConfigFilename)
 	defaultTLSCertPath = filepath.Join(DefaultSignerDir, defaultTLSCertFilename)
 	defaultTLSKeyPath  = filepath.Join(DefaultSignerDir, defaultTLSKeyFilename)
 )
@@ -63,13 +62,12 @@ type Config struct {
 	RawRPCListeners []string `long:"rpclisten" description:"Add an interface/port/socket to listen for RPC connections"`
 	RPCListeners    []net.Addr
 
-	Network string `long:"network" description:"The network for which the node was created in the vault. One of: 'testnet', 'simnet', 'regtest', 'signet'"`
-
+	Network string `long:"network" description:"The network for which the node was created in the wallet. One of: 'testnet', 'simnet', 'regtest', 'signet'"`
 	// ActiveNetParams contains parameters of the target chain.
 	ActiveNetParams chaincfg.Params
 
-	// Node contains the node ID as a 66-character hex string.
-	NodePubKey string `long:"nodepubkey" description:"Node pubkey hex"`
+	SeedPhrase string
+	PassPhrase string
 }
 
 // DefaultConfig returns all default values for the Config struct.
@@ -247,7 +245,7 @@ func ValidateConfig(cfg Config, fileParser, flagParser *flags.Parser) (
 	cfg.TLSCertPath = CleanAndExpandPath(cfg.TLSCertPath)
 	cfg.TLSKeyPath = CleanAndExpandPath(cfg.TLSKeyPath)
 
-	params, err := vault.GetNet(cfg.Network)
+	params, err := GetNet(cfg.Network)
 	if err != nil {
 		return nil, err
 	}
@@ -402,5 +400,26 @@ func ParseAddressString(strAddress string, defaultPort string) (net.Addr,
 	default:
 		return nil, fmt.Errorf("only TCP or unix socket "+
 			"addresses are supported: %s", parsedAddr)
+	}
+}
+func GetNet(strNet string) (*chaincfg.Params, error) {
+	switch strNet {
+	/*case "mainnet":
+	return &chaincfg.MainNetParams, nil
+	*/
+	case "testnet", "testnet3":
+		return &chaincfg.TestNet3Params, nil
+
+	case "simnet":
+		return &chaincfg.SimNetParams, nil
+
+	case "signet":
+		return &chaincfg.SigNetParams, nil
+
+	case "regtest":
+		return &chaincfg.RegressionNetParams, nil
+
+	default:
+		return nil, errors.New("invalid network")
 	}
 }

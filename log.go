@@ -6,7 +6,7 @@
 package lndsigner
 
 import (
-	"github.com/nydig/lndsigner/keyring"
+	"github.com/Safulet/cbs-lndsigner/keyring"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

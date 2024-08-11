@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
+	lndsigner "github.com/Safulet/cbs-lndsigner"
 	"os"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/nydig/lndsigner"
 )
 
 func main() {

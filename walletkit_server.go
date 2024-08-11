@@ -10,8 +10,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Safulet/cbs-lndsigner/proto"
 	"github.com/btcsuite/btcd/btcutil/psbt"
-	"github.com/nydig/lndsigner/proto"
 )
 
 // walletKit is a sub-RPC server that exposes a tool kit which allows clients

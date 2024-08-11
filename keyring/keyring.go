@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/Safulet/cbs-lndsigner/wallet"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
@@ -18,8 +19,6 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/hashicorp/vault/api"
-	"github.com/nydig/lndsigner/vault"
 )
 
 // signMethod defines the different ways a signer can sign, given a specific
@@ -78,26 +77,18 @@ type KeyDescriptor struct {
 	PubKey *btcec.PublicKey
 }
 
-// logicalWriter is an interface that specifies the relevant methods of the
-// vault/api.Logical struct for mocking in tests.
-type logicalWriter interface {
-	Write(string, map[string]interface{}) (*api.Secret, error)
-}
-
 // KeyRing is an HD keyring backed by pre-derived in-memory account keys from
 // which index keys can be quickly derived on demand.
 type KeyRing struct {
-	client logicalWriter
-	node   string
 	coin   uint32
+	wallet *wallet.Wallet
 }
 
-// NewKeyRing returns a vault-backed key ring.
-func NewKeyRing(client logicalWriter, node string, coin uint32) *KeyRing {
+// NewKeyRing returns a wallet-backed key ring.
+func NewKeyRing(coin uint32, wallet *wallet.Wallet) *KeyRing {
 	return &KeyRing{
-		client: client,
-		node:   node,
 		coin:   coin,
+		wallet: wallet,
 	}
 }
 
@@ -112,9 +103,8 @@ func (k *KeyRing) ECDH(keyDesc KeyDescriptor, pub *btcec.PublicKey) ([32]byte,
 	error) {
 
 	reqData := map[string]interface{}{
-		"node": k.node,
 		"path": []int{
-			int(vault.Bip0043purpose +
+			int(wallet.Bip0043purpose +
 				hdkeychain.HardenedKeyStart),
 			int(k.coin + hdkeychain.HardenedKeyStart),
 			int(keyDesc.Family + hdkeychain.HardenedKeyStart),
@@ -132,17 +122,15 @@ func (k *KeyRing) ECDH(keyDesc KeyDescriptor, pub *btcec.PublicKey) ([32]byte,
 
 	log.Debugf("Sending data %+v for shared key request", reqData)
 
-	sharedKeyResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/ecdh",
-		reqData,
-	)
+	sharedKeyResp, err := k.wallet.ECDH(reqData)
+
 	if err != nil {
 		return [32]byte{}, err
 	}
 
-	log.Debugf("Got data %+v in shared key response", sharedKeyResp.Data)
+	log.Debugf("Got data %+v in shared key response", sharedKeyResp)
 
-	sharedKeyHex, ok := sharedKeyResp.Data["sharedkey"].(string)
+	sharedKeyHex, ok := sharedKeyResp["sharedkey"].(string)
 	if !ok {
 		return [32]byte{}, ErrNoSharedKeyReturned
 	}
@@ -176,9 +164,8 @@ func (k *KeyRing) SignMessage(keyLoc KeyLocator, msg []byte, doubleHash bool,
 	}
 
 	reqData := map[string]interface{}{
-		"node": k.node,
 		"path": []int{
-			int(vault.Bip0043purpose + hdkeychain.HardenedKeyStart),
+			int(wallet.Bip0043purpose + hdkeychain.HardenedKeyStart),
 			int(k.coin + hdkeychain.HardenedKeyStart),
 			int(keyLoc.Family + hdkeychain.HardenedKeyStart),
 			0, // Only external branch in LN purpose.
@@ -194,17 +181,14 @@ func (k *KeyRing) SignMessage(keyLoc KeyLocator, msg []byte, doubleHash bool,
 
 	log.Debugf("Sending data %+v for signing request", reqData)
 
-	signResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/sign",
-		reqData,
-	)
+	signResp, err := k.wallet.DeriveAndSign(reqData)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debugf("Got data %+v in signing response", signResp.Data)
+	log.Debugf("Got data %+v in signing response", signResp)
 
-	signatureHex, ok := signResp.Data["signature"].(string)
+	signatureHex, ok := signResp["signature"].(string)
 	if !ok {
 		return nil, ErrNoSignatureReturned
 	}
@@ -226,9 +210,8 @@ func (k *KeyRing) SignMessageSchnorr(keyLoc KeyLocator, msg []byte,
 	}
 
 	reqData := map[string]interface{}{
-		"node": k.node,
 		"path": []int{
-			int(vault.Bip0043purpose + hdkeychain.HardenedKeyStart),
+			int(wallet.Bip0043purpose + hdkeychain.HardenedKeyStart),
 			int(k.coin + hdkeychain.HardenedKeyStart),
 			int(keyLoc.Family + hdkeychain.HardenedKeyStart),
 			0, // Only external branch in LN purpose.
@@ -244,21 +227,17 @@ func (k *KeyRing) SignMessageSchnorr(keyLoc KeyLocator, msg []byte,
 
 	log.Debugf("Sending data %+v for signing request", reqData)
 
-	signResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/sign",
-		reqData,
-	)
+	signResp, err := k.wallet.DeriveAndSign(reqData)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debugf("Got data %+v in signing response", signResp.Data)
+	log.Debugf("Got data %+v in signing response", signResp)
 
-	signatureHex, ok := signResp.Data["signature"].(string)
+	signatureHex, ok := signResp["signature"].(string)
 	if !ok {
 		return nil, ErrNoSignatureReturned
 	}
-
 	signatureBytes, err := hex.DecodeString(signatureHex)
 	if err != nil {
 		return nil, err
@@ -395,7 +374,6 @@ func (k *KeyRing) signSegWitV0(in *psbt.PInput, tx *wire.MsgTx,
 		in.Unknowns)
 
 	reqData := map[string]interface{}{
-		"node":   k.node,
 		"path":   sliceUint32ToInt(in.Bip32Derivation[0].Bip32Path),
 		"method": "ecdsa",
 		"digest": hex.EncodeToString(digest),
@@ -405,17 +383,14 @@ func (k *KeyRing) signSegWitV0(in *psbt.PInput, tx *wire.MsgTx,
 
 	log.Debugf("Sending data %+v for signing request", reqData)
 
-	signResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/sign",
-		reqData,
-	)
+	signResp, err := k.wallet.DeriveAndSign(reqData)
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("Got data %+v in signing response", signResp.Data)
+	log.Debugf("Got data %+v in signing response", signResp)
 
-	signatureHex, ok := signResp.Data["signature"].(string)
+	signatureHex, ok := signResp["signature"].(string)
 	if !ok {
 		return ErrNoSignatureReturned
 	}
@@ -425,7 +400,7 @@ func (k *KeyRing) signSegWitV0(in *psbt.PInput, tx *wire.MsgTx,
 		return err
 	}
 
-	pubKeyHex, ok := signResp.Data["pubkey"].(string)
+	pubKeyHex, ok := signResp["pubkey"].(string)
 	if !ok {
 		return ErrNoPubkeyReturned
 	}
@@ -465,7 +440,6 @@ func (k *KeyRing) signSegWitV1KeySpend(in *psbt.PInput, tx *wire.MsgTx,
 	}
 
 	reqData := map[string]interface{}{
-		"node":     k.node,
 		"path":     sliceUint32ToInt(in.Bip32Derivation[0].Bip32Path),
 		"method":   "schnorr",
 		"digest":   hex.EncodeToString(digest),
@@ -476,20 +450,17 @@ func (k *KeyRing) signSegWitV1KeySpend(in *psbt.PInput, tx *wire.MsgTx,
 
 	log.Debugf("Sending data %+v for signing request", reqData)
 
-	signResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/sign",
-		reqData,
-	)
+	signResp, err := k.wallet.DeriveAndSign(reqData)
 	if err != nil {
 		return err
 	}
 
-	signatureHex, ok := signResp.Data["signature"].(string)
+	signatureHex, ok := signResp["signature"].(string)
 	if !ok {
 		return ErrNoSignatureReturned
 	}
 
-	log.Debugf("Got data %+v in signing response", signResp.Data)
+	log.Debugf("Got data %+v in signing response", signResp)
 
 	signatureBytes, err := hex.DecodeString(signatureHex)
 	if err != nil {
@@ -523,7 +494,6 @@ func (k *KeyRing) signSegWitV1ScriptSpend(in *psbt.PInput, tx *wire.MsgTx,
 	}
 
 	reqData := map[string]interface{}{
-		"node":   k.node,
 		"path":   sliceUint32ToInt(in.Bip32Derivation[0].Bip32Path),
 		"method": "schnorr",
 		"digest": hex.EncodeToString(digest),
@@ -533,17 +503,14 @@ func (k *KeyRing) signSegWitV1ScriptSpend(in *psbt.PInput, tx *wire.MsgTx,
 
 	log.Debugf("Sending data %+v for signing request", reqData)
 
-	signResp, err := k.client.Write(
-		"lndsigner/lnd-nodes/sign",
-		reqData,
-	)
+	signResp, err := k.wallet.DeriveAndSign(reqData)
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("Got data %+v in signing response", signResp.Data)
+	log.Debugf("Got data %+v in signing response", signResp)
 
-	signatureHex, ok := signResp.Data["signature"].(string)
+	signatureHex, ok := signResp["signature"].(string)
 	if !ok {
 		return ErrNoSignatureReturned
 	}
@@ -585,7 +552,7 @@ func prepareScriptsV0(in *psbt.PInput) []byte {
 }
 
 // getTweakParams examines if there are any tweak parameters given in the
-// custom/proprietary PSBT fields and adds them to a vault request's data
+// custom/proprietary PSBT fields and adds them to a wallet request's data
 // to use them if populated.
 func getTweakParams(unknowns []*psbt.Unknown, reqData map[string]interface{}) {
 	// There can be other custom/unknown keys in a PSBT that we just ignore.

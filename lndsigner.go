@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -18,8 +19,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/hashicorp/vault/api"
-	"github.com/nydig/lndsigner/vault"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -56,14 +55,6 @@ func Main(cfg *Config, lisCfg ListenerCfg) error {
 	signerLog.Infow("Active Bitcoin network: ", "net",
 		cfg.ActiveNetParams.Name)
 
-	// Use defaults for vault client, including getting config from env.
-	vaultClient, err := api.NewClient(nil)
-	if err != nil {
-		return mkErr("error creating vault client: %v", err)
-	}
-
-	signerClient := vaultClient.Logical()
-
 	serverOpts, err := getTLSConfig(cfg)
 	if err != nil {
 		return mkErr("unable to load TLS credentials: %v", err)
@@ -96,7 +87,10 @@ func Main(cfg *Config, lisCfg ListenerCfg) error {
 
 	// Initialize the rpcServer and add its interceptor to the server
 	// options.
-	rpcServer := newRPCServer(cfg, signerClient)
+	rpcServer, err := newRPCServer(cfg)
+	if err != nil {
+		return mkErr("error creating new RPC server: %v", err)
+	}
 	serverOpts = append(
 		serverOpts,
 		grpc.ChainUnaryInterceptor(rpcServer.intercept),
@@ -261,7 +255,7 @@ func GetAccounts(acctList string) (map[[3]uint32]string, error) {
 		var derPath [3]uint32
 		for idx, el := range pathEls[1:] {
 			if !strings.HasSuffix(el, "'") {
-				return nil, vault.ErrElementNotHardened
+				return nil, errors.New("derivation path element not hardened")
 			}
 
 			intEl, err := strconv.ParseUint(el[:len(el)-1], 10, 32)
