@@ -168,7 +168,21 @@ func (b *Wallet) ListAccounts() (map[string]interface{}, error) {
 }
 
 func (b *Wallet) ECDH(data map[string]interface{}) (map[string]interface{}, error) {
-	peerPubHex := data["peer"].(string)
+
+	peerPubHex := ""
+	if v1, ok := data["peer"].(string); ok {
+		peerPubHex = v1
+	}
+	var path []int
+	if v2, ok := data["path"].([]int); ok {
+		path = v2
+	}
+
+	pubKeyHex := ""
+	if v3, ok := data["pubkey"].(string); ok {
+		pubKeyHex = v3
+	}
+
 	if len(peerPubHex) != 2*btcec.PubKeyBytesLenCompressed {
 		log.Println("Peer pubkey is wrong length",
 			"peer", peerPubHex)
@@ -195,29 +209,24 @@ func (b *Wallet) ECDH(data map[string]interface{}) (map[string]interface{}, erro
 	)
 	peerPubKey.AsJacobian(&pubJacobian)
 
-	strNode := data["node"].(string)
-
-	privKey, err := derivePrivKey(b.Seed, b.NetworkParams, data["path"].([]int))
+	privKey, err := derivePrivKey(b.Seed, b.NetworkParams, path)
 	if err != nil {
-		log.Println("Failed to derive privkey",
-			"node", strNode, "error", err)
+		log.Println("Failed to derive privkey", "error", err)
 		return nil, err
 	}
 	defer privKey.Zero()
 
-	err = checkRequiredPubKey(privKey, data["pubkey"].(string))
+	err = checkRequiredPubKey(privKey, pubKeyHex)
 	if err != nil {
 		// We log here as warning because there's no case when we
 		// should be using ECDH with a mismatching own key.
-		log.Println("Pubkey mismatch",
-			"node", strNode, "error", err)
+		log.Println("Pubkey mismatch", "error", err)
 		return nil, err
 	}
 
 	ecPrivKey, err := privKey.ECPrivKey()
 	if err != nil {
-		log.Println("Failed to derive valid ECDSA privkey",
-			"node", strNode, "error", err)
+		log.Println("Failed to derive valid ECDSA privkey", "error", err)
 		return nil, err
 	}
 	defer ecPrivKey.Zero()
@@ -233,7 +242,12 @@ func (b *Wallet) ECDH(data map[string]interface{}) (map[string]interface{}, erro
 }
 
 func (b *Wallet) DerivePubKey(data map[string]interface{}) (map[string]interface{}, error) {
-	pubKey, err := derivePubKey(b.Seed, b.NetworkParams, data["path"].([]int))
+	var path []int
+	if v0, ok := data["path"].([]int); ok {
+		path = v0
+	}
+
+	pubKey, err := derivePubKey(b.Seed, b.NetworkParams, path)
 	if err != nil {
 		log.Println("Failed to derive pubkey", "error", err)
 		return nil, err
@@ -252,9 +266,49 @@ func (b *Wallet) DerivePubKey(data map[string]interface{}) (map[string]interface
 
 func (b *Wallet) DeriveAndSign(data map[string]interface{}) (map[string]interface{}, error) {
 
-	tapTweakHex := data["taptweak"].(string)
-	singleTweakHex := data["ln1tweak"].(string)
-	doubleTweakHex := data["ln2tweak"].(string)
+	signMethod := ""
+	pubkeyHex := ""
+	tapTweakHex := ""
+	singleTweakHex := ""
+	doubleTweakHex := ""
+	digestHex := ""
+
+	var path []int
+
+	v0, ok := data["path"].([]int)
+	if ok {
+		path = v0
+	}
+
+	v1, ok := data["taptweak"].(string)
+	if ok {
+		tapTweakHex = v1
+	}
+
+	v2, ok := data["ln1tweak"].(string)
+	if ok {
+		singleTweakHex = v2
+	}
+
+	v3, ok := data["ln2tweak"].(string)
+	if ok {
+		doubleTweakHex = v3
+	}
+
+	v4, ok := data["pubkey"].(string)
+	if ok {
+		pubkeyHex = v4
+	}
+
+	v5, ok := data["method"].(string)
+	if ok {
+		signMethod = v5
+	}
+
+	v6, ok := data["digest"].(string)
+	if ok {
+		digestHex = v6
+	}
 
 	numTweaks := int(0)
 
@@ -270,14 +324,14 @@ func (b *Wallet) DeriveAndSign(data map[string]interface{}) (map[string]interfac
 		return nil, ErrTooManyTweaks
 	}
 
-	privKey, err := derivePrivKey(b.Seed, b.NetworkParams, data["path"].([]int))
+	privKey, err := derivePrivKey(b.Seed, b.NetworkParams, path)
 	if err != nil {
 		log.Println("Failed to derive privkey", "error", err)
 		return nil, err
 	}
 	defer privKey.Zero()
 
-	err = checkRequiredPubKey(privKey, data["pubkey"].(string))
+	err = checkRequiredPubKey(privKey, pubkeyHex)
 	if err != nil {
 		// We log here as info because this is expected when signing
 		// a PSBT.
@@ -291,8 +345,6 @@ func (b *Wallet) DeriveAndSign(data map[string]interface{}) (map[string]interfac
 		return nil, err
 	}
 	defer ecPrivKey.Zero()
-
-	signMethod := data["method"].(string)
 
 	// Taproot tweak.
 	var tapTweakBytes []byte
@@ -341,13 +393,12 @@ func (b *Wallet) DeriveAndSign(data map[string]interface{}) (map[string]interfac
 		ecPrivKey = deriveRevocationPrivKey(ecPrivKey, doubleTweakKey)
 	}
 
-	digest := data["digest"].(string)
-	if len(digest) != 64 {
+	if len(digestHex) != 64 {
 		log.Println("Digest is not hex-encoded 32-byte value")
 		return nil, errors.New("invalid digest")
 	}
 
-	digestBytes, err := hex.DecodeString(digest)
+	digestBytes, err := hex.DecodeString(digestHex)
 	if err != nil {
 		log.Println("Failed to decode digest from hex",
 			"error", err)

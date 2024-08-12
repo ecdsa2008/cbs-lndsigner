@@ -1,105 +1,24 @@
-// Copyright (C) 2015-2022 Lightning Labs and The Lightning Network Developers
-// Copyright (C) 2022 Bottlepay and The Lightning Network Developers
-
 package wallet
 
 import (
-	"encoding/binary"
-	"hash/crc32"
 	"strings"
-
-	"github.com/Yawning/aez"
-	"github.com/kkdai/bstream"
-	"golang.org/x/crypto/scrypt"
 )
 
 var (
-	// reverseWordMap maps a word to its position within the default word list.
-	reverseWordMap map[string]int
+	// ReverseWordMap maps a word to its position within the default word list.
+	ReverseWordMap map[string]int
 )
 
-func SeedFromSeedAndPassPhrases(seedPhrase, passPhrase string) ([]byte, error) {
-	if passPhrase == "" {
-		passPhrase = "aezeed"
-	}
-
-	mnemonic := strings.Split(
-		strings.ToLower(strings.TrimSpace(seedPhrase)), " ",
-	)
-
-	if len(mnemonic) != 24 {
-		return nil, ErrSeedPhraseWrongLength
-	}
-
-	cipherBits := bstream.NewBStreamWriter(33)
-
-	for _, word := range mnemonic {
-		idx, ok := reverseWordMap[word]
-		if !ok {
-			return nil, ErrSeedPhraseNotBIP39
-		}
-
-		cipherBits.WriteBits(uint64(idx), 11)
-	}
-
-	cipherText := cipherBits.Bytes()
-
-	if cipherText[0] != byte(0) {
-		return nil, ErrBadCipherSeedVer
-	}
-
-	salt := cipherText[24:29]
-
-	checksum := cipherText[29:]
-	if len(checksum) != 4 {
-		return nil, ErrWrongLengthChecksum
-	}
-
-	freshChecksum := crc32.Checksum(
-		cipherText[:29], crc32.MakeTable(crc32.Castagnoli),
-	)
-	if freshChecksum != binary.BigEndian.Uint32(checksum) {
-		return nil, ErrChecksumMismatch
-	}
-
-	cipherSeed := cipherText[1:24]
-
-	key, err := scrypt.Key([]byte(passPhrase), salt, 32768, 8, 1, 32)
-	if err != nil {
-		return nil, err
-	}
-
-	ad := make([]byte, 6)
-	ad[0] = cipherText[0]
-	copy(ad[1:], salt)
-
-	plainSeedBytes, ok := aez.Decrypt(
-		key, nil, [][]byte{ad[:]}, 4, cipherSeed, nil,
-	)
-	if !ok {
-		return nil, ErrInvalidPassphrase
-	}
-
-	if plainSeedBytes[0] != byte(1) && plainSeedBytes[0] != byte(0) {
-		return nil, ErrWrongInternalVersion
-	}
-
-	entropy := make([]byte, 16)
-	copy(entropy[:], plainSeedBytes[3:])
-
-	return entropy, nil
-}
-
 func init() {
-	reverseWordMap = make(map[string]int)
-	for i, v := range defaultWordList {
-		reverseWordMap[v] = i
+	ReverseWordMap = make(map[string]int)
+	for i, v := range DefaultWordList {
+		ReverseWordMap[v] = i
 	}
 }
 
-// defaultWordList is a slice of the current default word list that's used to
+// DefaultWordList is a slice of the current default word list that's used to
 // encode the enciphered seed into a human readable set of words.
-var defaultWordList = strings.Split(englishWordList, "\n")
+var DefaultWordList = strings.Split(englishWordList, "\n")
 
 // englishWordList is an English wordlist that's used as part of version 0 of
 // the cipherseed scheme. This is the *same* word list that's recommend for use
@@ -2038,7 +1957,7 @@ vanish
 vapor
 various
 vast
-Wallet
+vault
 vehicle
 velvet
 vendor

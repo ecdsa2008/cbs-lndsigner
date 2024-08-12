@@ -101,7 +101,6 @@ func NewKeyRing(coin uint32, wallet *wallet.Wallet) *KeyRing {
 //	sx := k*P s := sha256(sx.SerializeCompressed())
 func (k *KeyRing) ECDH(keyDesc KeyDescriptor, pub *btcec.PublicKey) ([32]byte,
 	error) {
-
 	reqData := map[string]interface{}{
 		"path": []int{
 			int(wallet.Bip0043purpose +

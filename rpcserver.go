@@ -7,6 +7,7 @@ package lndsigner
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"github.com/Safulet/cbs-lndsigner/wallet"
 
@@ -43,7 +44,7 @@ var _ proto.LightningServer = (*rpcServer)(nil)
 // dependencies are added, this will be an non-functioning RPC server only to
 // be used to register the LightningService with the gRPC server.
 func newRPCServer(cfg *Config) (*rpcServer, error) {
-	seed, err := wallet.SeedFromSeedAndPassPhrases(cfg.SeedPhrase, cfg.PassPhrase)
+	seed, err := hex.DecodeString(cfg.Seed)
 	if err != nil {
 		return nil, err
 	}

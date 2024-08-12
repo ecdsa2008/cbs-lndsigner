@@ -35,7 +35,7 @@ var (
 	//   C:\Users\<username>\AppData\Local\Lndsigner on Windows
 	//   ~/.lndsigner on Linux
 	//   ~/Library/Application Support/Lndsigner on MacOS
-	DefaultSignerDir = btcutil.AppDataDir("cbs_lndsigner", false)
+	DefaultSignerDir = btcutil.AppDataDir("cbs-lndsigner", false)
 
 	// DefaultConfigFile is the default full path of lndsignerd's
 	// configuration file.
@@ -66,8 +66,7 @@ type Config struct {
 	// ActiveNetParams contains parameters of the target chain.
 	ActiveNetParams chaincfg.Params
 
-	SeedPhrase string
-	PassPhrase string
+	Seed string `long:"seed" description:"The wallet seed"`
 }
 
 // DefaultConfig returns all default values for the Config struct.
